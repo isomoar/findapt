@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Main where
 
@@ -26,6 +27,8 @@ import           Web.Telegram.API.Bot (Token(..))
 data Config = Config 
   { cPatterns :: [T.Text] 
   , cUrl :: T.Text
+  , cFrom :: Integer
+  , cTo :: Integer
   , token :: Token
   } deriving Show
 
@@ -45,7 +48,7 @@ webWatch config =
 
 watchOnce :: WebWatchM ()
 watchOnce = do
-  Config cPatterns cUrl token <- ask
+  Config {..} <- ask
   slog $ "Getting links from " ++ T.unpack cUrl
   links <- liftIO $ getMatchingLinks cPatterns cUrl
   slog $ "All links: " ++ show links
@@ -74,10 +77,12 @@ parseConfig :: C.Config -> IO Config
 parseConfig conf = do
   cPatterns <- C.require conf "patterns"
   cUrl <- C.require conf "url"
+  cFrom <- C.require conf "from"
+  cTo <- C.require conf "to"
   tokenEnv <- lookupEnv "TELEGRAM_TOKEN"
   let token = fromMaybe (Token T.empty) $ 
         (\x -> Token ("bot" <> T.pack x)) <$> tokenEnv
-  return $ Config cPatterns cUrl token
+  return $ Config {..}
 
 main :: IO ()
 main = do
