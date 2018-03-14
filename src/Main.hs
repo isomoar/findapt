@@ -6,6 +6,8 @@ import qualified Data.Configurator as C
 import qualified Data.Configurator.Types as C
 import qualified Data.Text as T
 import qualified Data.HashSet as HS
+import Data.Maybe (fromMaybe)
+import Data.Monoid ((<>))
 import Control.Monad.Reader (ReaderT, ask, runReaderT)
 import Control.Monad.State (StateT, evalStateT, state)
 import Control.Monad.Trans (liftIO)
@@ -15,14 +17,16 @@ import Control.Monad (forever, unless)
 import GetLinks
 import Telegram
 import Control.Exception
+import System.Environment
 
 import           Network.HTTP.Client      (newManager)
 import           Network.HTTP.Client.TLS  (tlsManagerSettings)
-import           Web.Telegram.API.Bot
+import           Web.Telegram.API.Bot (Token(..))
 
 data Config = Config 
   { cPatterns :: [T.Text] 
   , cUrl :: T.Text
+  , token :: Token
   } deriving Show
 
 type LinkSet = HS.HashSet T.Text
@@ -41,7 +45,7 @@ webWatch config =
 
 watchOnce :: WebWatchM ()
 watchOnce = do
-  Config cPatterns cUrl <- ask
+  Config cPatterns cUrl token <- ask
   slog $ "Getting links from " ++ T.unpack cUrl
   links <- liftIO $ getMatchingLinks cPatterns cUrl
   slog $ "All links: " ++ show links
@@ -50,7 +54,7 @@ watchOnce = do
   liftIO $ threadDelay (5 * 1000 * 1000)
   unless (null newLinks) $ do
     slog $ "Sending telegram message..."
-    catchExceptions () $ sendLinks newLinks
+    catchExceptions () $ sendLinks newLinks token
 
 slog :: String -> WebWatchM ()
 slog msg = liftIO $ hPutStrLn stderr msg
@@ -70,7 +74,10 @@ parseConfig :: C.Config -> IO Config
 parseConfig conf = do
   cPatterns <- C.require conf "patterns"
   cUrl <- C.require conf "url"
-  return $ Config cPatterns cUrl
+  tokenEnv <- lookupEnv "TELEGRAM_TOKEN"
+  let token = fromMaybe (Token T.empty) $ 
+        (\x -> Token ("bot" <> T.pack x)) <$> tokenEnv
+  return $ Config cPatterns cUrl token
 
 main :: IO ()
 main = do

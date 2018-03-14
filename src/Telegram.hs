@@ -29,10 +29,9 @@ mkPayload links = Payload
     ++ ["- " <> lTitle link <> "\n " <> lHref link | link <- links]
   }
 
-sendLinks :: [Link] -> IO ()
-sendLinks links = do
-  let token = Token "<token>" 
-      chatId = ChatId 12345
+sendLinks :: [Link] -> Token -> IO ()
+sendLinks links token = do
+  let chatId = ChatId 75166061
       payload = mkPayload links
   manager <- newManager tlsManagerSettings
   result <- runTelegramClient token manager $ do
@@ -42,4 +41,5 @@ sendLinks links = do
       Aeson.encodeToTextBuilder $ 
       Aeson.toJSON payload)
   print result
+  print token
   print "done!"
