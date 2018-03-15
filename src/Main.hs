@@ -44,7 +44,7 @@ addLinks links set =
 
 webWatch :: Config -> IO ()
 webWatch config = 
-  evalStateT (runReaderT (forever watchOnce) config) HS.empty
+  evalStateT (runReaderT (watchOnce) config) HS.empty
 
 watchOnce :: WebWatchM ()
 watchOnce = do
@@ -54,10 +54,10 @@ watchOnce = do
   slog $ "All links: " ++ show links
   newLinks <- state (addLinks links)
   slog $ "New links: " ++ show newLinks
-  liftIO $ threadDelay (5 * 1000 * 1000)
-  unless (null newLinks) $ do
-    slog $ "Sending telegram message..."
-    catchExceptions () $ sendLinks newLinks token
+  liftIO $ sendLinks newLinks token
+  -- unless (null newLinks) $ do
+  --   slog $ "Sending telegram message..."
+  --   catchExceptions () $ sendLinks newLinks token
 
 slog :: String -> WebWatchM ()
 slog msg = liftIO $ hPutStrLn stderr msg
