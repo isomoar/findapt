@@ -13,6 +13,7 @@ import Data.Char (isDigit)
 import qualified Network.HTTP.Conduit as Http (parseUrl)
 import qualified Network.HTTP.Simple as Http 
 import qualified Network.URI as Uri 
+import Text.HTML.TagSoup.Match as TagSoup
 import Text.HTML.TagSoup as TagSoup
   ((~==), (~/=), fromTagText, sections, parseTags, Tag(..), innerText)
 import System.IO
@@ -27,26 +28,24 @@ data Link = Link
 
 getMatchingLinks :: [T.Text] -> T.Text -> IO [Link]
 getMatchingLinks patterns uri = do
-  lbs <- readFile "test.htm"
-  let htmlPageAsText = lbs
-  -- req <- Http.parseRequest (T.unpack uri)
-  -- lbs <- Http.getResponseBody <$> Http.httpLbs req
-  -- let htmlPageAsText = T.unpack $ TL.toStrict $ TL.decodeUtf8 lbs
-      t = map parseAmount . sections (~=== "<tr class=trm_02>") $ 
-        TagSoup.parseTags htmlPageAsText 
-      t1 = map parseDistrict . sections (~=== "<tr class=trm_02>") $ 
-        TagSoup.parseTags htmlPageAsText 
-      parseDistrict = map fromTagText . drop 1. take 2 . 
-        dropWhile (~/== "<span class=tdm_rn>" ) 
-      parseAmount = filter isDigit . innerText . take 5 . 
-        dropWhile (~/== "<td class=tdm_05>" ) 
-  putStr (intercalate ", "  t)
-  putStr (intercalate ", " $ concat t1)
-  -- print (t1)
-  return []
-  --   makeAbsolute uri $
-  --   matchingLinks patterns $
-    -- extractLinks htmlPageAsText
+  -- lbs <- readFile "test.htm"
+  -- let htmlPageAsText = lbs
+  req <- Http.parseRequest (T.unpack uri)
+  lbs <- Http.getResponseBody <$> Http.httpLbs req
+  let htmlPageAsText = T.unpack $ TL.toStrict $ TL.decodeUtf8 lbs
+      t =  map (parseRow . takeWhile (~/== "<div class=td-plata>")) 
+            . sections (~=== "<tr class=trm_02>") $ 
+              TagSoup.parseTags htmlPageAsText 
+      parseRow (t:tags0) =
+        let cond
+              | TagSoup.tagOpenAttrLit "td" ("class", "tdm_05") t = 
+                filter isDigit . innerText . take 2 $ tags0
+              | TagSoup.tagOpenAttrLit "span" ("class", "tdm_rn") t = 
+                concat . map fromTagText . take 1 $ tags0
+              | otherwise = []
+        in if cond == "" then parseRow tags0 else cond : parseRow tags0
+      parseRow [] = []
+  return $ map (\(am:d:_) -> Link (T.pack am) (T.pack d)) t
 
 extractLinks :: String -> [Link]
 extractLinks = findByClassName . TagSoup.parseTags
@@ -63,14 +62,6 @@ extractLinks = findByClassName . TagSoup.parseTags
           Link (TagSoup.innerText title) href : findLinks tags1
     findLinks (_ : tags0) = findLinks tags0
     findLinks [] = []
-
-makeAbsolute :: T.Text -> [Link] -> [Link]
-makeAbsolute url = mapMaybe $ \l -> do
-  base <- baseUri
-  href <- Uri.parseURI $ T.unpack (lHref l)
-  return l {lHref = T.pack $ show $ href `Uri.relativeTo` base}
-    where
-      baseUri = Uri.parseURI $ T.unpack url
 
 matchingLinks :: [T.Text] -> [Link] -> [Link]
 matchingLinks patterns = filter $
