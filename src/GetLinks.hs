@@ -28,20 +28,25 @@ data Link = Link
 
 getMatchingLinks :: [T.Text] -> T.Text -> IO [Link]
 getMatchingLinks patterns uri = do
-  -- lbs <- readFile "test.htm"
-  -- let htmlPageAsText = lbs
-  req <- Http.parseRequest (T.unpack uri)
-  lbs <- Http.getResponseBody <$> Http.httpLbs req
-  let htmlPageAsText = T.unpack $ TL.toStrict $ TL.decodeUtf8 lbs
-      t =  map (parseRow . takeWhile (~/== "<div class=td-plata>")) 
+  lbs <- readFile "test.htm"
+  let htmlPageAsText = lbs
+  -- req <- Http.parseRequest (T.unpack uri)
+  -- lbs <- Http.getResponseBody <$> Http.httpLbs req
+  -- let htmlPageAsText = T.unpack $ TL.toStrict $ TL.decodeUtf8 lbs
+      t =  map (parseRow . takeWhile (~/== "<div class=td-download-pdf>")) 
             . sections (~=== "<tr class=trm_02>") $ 
               TagSoup.parseTags htmlPageAsText 
       parseRow (t:tags0) =
-        let cond
+        let withId attrs = 
+              case lookup "href" attrs of
+                Nothing -> False
+                Just href -> take 30 href == "/workpage.php?page=variant&rv="
+            cond
               | TagSoup.tagOpenAttrLit "td" ("class", "tdm_05") t = 
                 filter isDigit . innerText . take 2 $ tags0
               | TagSoup.tagOpenAttrLit "span" ("class", "tdm_rn") t = 
                 concat . map fromTagText . take 1 $ tags0
+              | TagSoup.tagOpenLit "a" withId t = "id"
               | otherwise = []
         in if cond == "" then parseRow tags0 else cond : parseRow tags0
       parseRow [] = []
