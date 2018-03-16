@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module GetLinks 
-  (Link (..), getMatchingLinks)
+  (Apartment (..), getMatchingLinks)
     where
 
 import Data.List
@@ -15,62 +15,56 @@ import qualified Network.HTTP.Simple as Http
 import qualified Network.URI as Uri 
 import Text.HTML.TagSoup.Match as TagSoup
 import Text.HTML.TagSoup as TagSoup
-  ((~==), (~/=), fromTagText, sections, parseTags, Tag(..), innerText)
+  ((~==), (~/=), fromTagText, fromAttrib, sections, parseTags, Tag(..), innerText)
 import System.IO
 
-data Link = Link 
-  { lTitle :: !T.Text
-  , lHref :: !T.Text
+data Apartment = Apartment 
+  { aDistrict :: !T.Text
+  , aPrice :: !T.Text
+  , aHref :: !T.Text
   } deriving Show
 
 (~===) a b = a ~== (b :: String)
 (~/==) a b = a ~/= (b :: String)
 
-getMatchingLinks :: [T.Text] -> T.Text -> IO [Link]
+initial = Apartment T.empty T.empty T.empty
+
+getMatchingLinks :: [T.Text] -> T.Text -> IO [Apartment]
 getMatchingLinks patterns uri = do
-  lbs <- readFile "test.htm"
-  let htmlPageAsText = lbs
-  -- req <- Http.parseRequest (T.unpack uri)
-  -- lbs <- Http.getResponseBody <$> Http.httpLbs req
-  -- let htmlPageAsText = T.unpack $ TL.toStrict $ TL.decodeUtf8 lbs
-      t =  map (parseRow . takeWhile (~/== "<div class=td-download-pdf>")) 
+  -- lbs <- readFile "test.htm"
+  -- let htmlPageAsText = lbs
+  req <- Http.parseRequest (T.unpack uri)
+  lbs <- Http.getResponseBody <$> Http.httpLbs req
+  let htmlPageAsText = T.unpack $ TL.toStrict $ TL.decodeUtf8 lbs
+      t = map (parseRow initial . takeWhile (~/== "<div class=td-download-pdf>")) 
             . sections (~=== "<tr class=trm_02>") $ 
               TagSoup.parseTags htmlPageAsText 
-      parseRow (t:tags0) =
+      parseRow acc (t:tags0) =
         let withId attrs = 
               case lookup "href" attrs of
                 Nothing -> False
                 Just href -> take 30 href == "/workpage.php?page=variant&rv="
             cond
               | TagSoup.tagOpenAttrLit "td" ("class", "tdm_05") t = 
-                filter isDigit . innerText . take 2 $ tags0
+                acc {aPrice = T.pack $ 
+                        filter isDigit . innerText . take 2 $ tags0 
+                    }
               | TagSoup.tagOpenAttrLit "span" ("class", "tdm_rn") t = 
-                concat . map fromTagText . take 1 $ tags0
-              | TagSoup.tagOpenLit "a" withId t = "id"
-              | otherwise = []
-        in if cond == "" then parseRow tags0 else cond : parseRow tags0
-      parseRow [] = []
-  return $ map (\(am:d:_) -> Link (T.pack am) (T.pack d)) t
+                acc { aDistrict = T.pack $ 
+                        concat . map fromTagText . take 1 $ tags0
+                    }
+              | TagSoup.tagOpenLit "a" withId t = 
+                acc { aHref = T.pack $
+                        (++) "http://arenda-piter.ru" $ fromAttrib "href" t
+                    }
+              | otherwise = acc
+        in  parseRow cond tags0
+      parseRow acc [] = acc
+  return t
 
-extractLinks :: String -> [Link]
-extractLinks = findByClassName . TagSoup.parseTags
-  where
-    findByClassName tags = map f $ sections (~=== "<td class=tdm_05>") tags
-    f :: [Tag String] -> Link
-    f ts = Link (T.empty) . T.pack . TagSoup.fromTagText . head $ ts
-    findLinks (TagSoup.TagOpen "a" args : tags0) = 
-      let closeLink = (== TagSoup.TagClose "a") in
-      case (lookup "href" args, break closeLink tags0) of
-        (Nothing, (_, tags1)) -> findLinks tags1
-        (_, (_, [])) -> []
-        (Just href, (title, (_ : tags1))) -> 
-          Link (TagSoup.innerText title) href : findLinks tags1
-    findLinks (_ : tags0) = findLinks tags0
-    findLinks [] = []
-
-matchingLinks :: [T.Text] -> [Link] -> [Link]
+matchingLinks :: [T.Text] -> [Apartment] -> [Apartment]
 matchingLinks patterns = filter $
-  \l -> any (`T.isInfixOf` T.toLower (lTitle l))  lpatterns
+  \l -> any (`T.isInfixOf` T.toLower (aDistrict l))  lpatterns
     where
       lpatterns = map T.toLower patterns
 

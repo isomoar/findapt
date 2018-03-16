@@ -32,32 +32,36 @@ data Config = Config
   , token :: Token
   } deriving Show
 
-type LinkSet = HS.HashSet T.Text
+type ApartmentSet = HS.HashSet T.Text
 
-type WebWatchM = ReaderT Config (StateT LinkSet IO)
+type WebWatchM = ReaderT Config (StateT ApartmentSet IO)
 
-addLinks :: [Link] -> LinkSet -> ([Link], LinkSet)
+addLinks :: [Apartment] -> ApartmentSet -> ([Apartment], ApartmentSet)
 addLinks links set = 
-  (new, HS.union set (HS.fromList $ map lHref new))
+  (new, HS.union set (HS.fromList $ map aHref new))
     where
-      new = filter (\l -> not $ lHref l `HS.member` set) links
+      new = filter (\l -> not $ aHref l `HS.member` set) links
 
 webWatch :: Config -> IO ()
 webWatch config = 
-  evalStateT (runReaderT (watchOnce) config) HS.empty
+  evalStateT (runReaderT (forever watchOnce) config) HS.empty
+
+-- apt = Apartment (T.pack "apt") (T.pack "1") (T.pack "2")
 
 watchOnce :: WebWatchM ()
 watchOnce = do
   Config {..} <- ask
   slog $ "Getting links from " ++ T.unpack cUrl
   links <- liftIO $ getMatchingLinks cPatterns cUrl
-  slog $ "All links: " ++ show links
+  -- slog $ "All links: " ++ show (map aHref links)
   newLinks <- state (addLinks links)
-  slog $ "New links: " ++ show newLinks
+  slog $ "New links: " ++ show (map aHref newLinks)
   liftIO $ sendLinks newLinks token
-  -- unless (null newLinks) $ do
-  --   slog $ "Sending telegram message..."
-  --   catchExceptions () $ sendLinks newLinks token
+  unless (null newLinks) $ do
+    slog $ "Sending telegram message..."
+    catchExceptions () $ sendLinks newLinks token
+  slog $ "Sleeping 1 minute"
+  liftIO $ threadDelay (5 * 1000 * 1000)
 
 slog :: String -> WebWatchM ()
 slog msg = liftIO $ hPutStrLn stderr msg

@@ -18,18 +18,15 @@ data Payload = Payload
   { payloadText :: !T.Text }
   deriving Show
 
--- mkPayload :: [Link] -> Payload
--- mkPayload links = Payload 
---   { payloadText = T.unlines $ 
---     [ "New links have been found. ", "" ]
---     ++ ["- " <> lTitle link <> "\n " <> lHref link | link <- links]
---   }
+mkPayload :: [Apartment] -> T.Text
+mkPayload apartments = 
+  T.unlines $ ["\n" 
+  <> aDistrict apt <> ", " 
+  <> aPrice apt <> " " 
+  <> aHref apt
+      | apt <- apartments]
 
-mkPayload :: [Link] -> T.Text
-mkPayload links = 
-  T.unlines $ ["\n" <> lTitle link <> ", " <> lHref link | link <- links]
-
-sendLinks :: [Link] -> Token -> IO ()
+sendLinks :: [Apartment] -> Token -> IO ()
 sendLinks links token = do
   let chatId = ChatId 75166061
       payload =  mkPayload links
@@ -39,5 +36,4 @@ sendLinks links token = do
       message_parse_mode = Just Markdown }
     sendMessageM request
   print result
-  print token
   print "done!"
